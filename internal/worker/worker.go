@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -30,6 +31,8 @@ type Config struct {
 func Run(ctx context.Context, js nats.JetStreamContext, cfg Config) error {
 	sub, err := js.PullSubscribe(queue.SubjectScan, "xiphos-workers",
 		nats.AckWait(cfg.ScanTimeout+cfg.CloneTimeout+30*time.Second),
+		nats.MaxDeliver(5),
+		nats.MaxAckPending(1),
 	)
 	if err != nil {
 		return fmt.Errorf("subscribe %s: %w", queue.SubjectScan, err)
@@ -85,6 +88,10 @@ func processJob(ctx context.Context, js nats.JetStreamContext, msg *nats.Msg, cf
 
 	// Create unique clone directory per job.
 	cloneDir := filepath.Join(cfg.CloneDir, job.JobID)
+
+	// Clean up any stale directory from a previous retry attempt.
+	_ = os.RemoveAll(cloneDir)
+
 	defer func() {
 		if err := os.RemoveAll(cloneDir); err != nil {
 			slog.Warn("cleanup failed", "dir", cloneDir, "error", err)
@@ -132,7 +139,8 @@ func cloneRepo(ctx context.Context, cloneURL, dest string, timeout time.Duration
 	defer cancel()
 
 	// Separate arguments — no shell injection possible (go-security: Command Injection).
-	cmd := exec.CommandContext(ctx, "git", "clone", "--no-shallow", cloneURL, dest)
+	// A plain git clone performs a full clone by default — no --depth flag means full history.
+	cmd := exec.CommandContext(ctx, "git", "clone", cloneURL, dest)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 
@@ -152,14 +160,15 @@ func runVexil(ctx context.Context, repoDir, vexilBin string, concurrency int, ti
 		"--git-aware",
 		"--format", "json",
 	}
-	if concurrency > 0 {
-		args = append(args, "--concurrency", fmt.Sprintf("%d", concurrency))
-	}
 
 	// Separate arguments — no shell injection possible.
 	cmd := exec.CommandContext(ctx, vexilBin, args...)
 
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
 	output, err := cmd.Output()
+	slog.Info("vexil executed", "output_len", len(output), "stderr_len", stderrBuf.Len())
 	if err != nil {
 		// Vexil exits 1 when findings are present — that is not an error for us.
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -176,8 +185,11 @@ func runVexil(ctx context.Context, repoDir, vexilBin string, concurrency int, ti
 
 	// Parse Vexil JSON envelope with size limit (go-security: JSON envelope pattern).
 	var envelope model.VexilEnvelope
+	if len(output) == 0 {
+		return nil, fmt.Errorf("vexil produced no output; stderr: %s", stderrBuf.String())
+	}
 	if err := json.Unmarshal(output, &envelope); err != nil {
-		return nil, fmt.Errorf("parse vexil output: %w", err)
+		return nil, fmt.Errorf("parse vexil output (%d bytes): %w", len(output), err)
 	}
 
 	return &envelope, nil
