@@ -68,12 +68,14 @@ var ownRepos = []repo{
 	{"wardex-foundry", "https://github.com/had-nu/wardex-foundry.git"},
 	{"vexil", "https://github.com/had-nu/vexil.git"},
 	{"astra-pathfinder", "https://github.com/had-nu/astra-pathfinder.git"},
+	{"project-xiphos", "https://github.com/had-nu/project-xiphos.git"},
 }
 
 func main() {
 	vexilBin := flag.String("vexil-bin", "vexil", "Path to Vexil binary")
 	cloneBase := flag.String("clone-dir", "/tmp/xiphos-bench", "Base directory for cached clones")
 	cloneDelay := flag.Duration("clone-delay", 500*time.Millisecond, "Delay between clone operations (rate limiting)")
+	vexilConcurrency := flag.Int("vexil-concurrency", 16, "Vexil internal worker pool size")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
@@ -114,7 +116,7 @@ func main() {
 	fmt.Fprintln(os.Stderr, "")
 
 	for _, workers := range concurrencyLevels {
-		run := runBenchmark(workers, ownRepos, *vexilBin, *cloneBase)
+		run := runBenchmark(workers, *vexilConcurrency, ownRepos, *vexilBin, *cloneBase)
 
 		if workers == 1 {
 			baselineWall = run.WallClock
@@ -146,18 +148,18 @@ func main() {
 
 	// Phase 4: Summary table.
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "┌──────────┬──────────┬───────────┬───────────┬─────────┐")
-	fmt.Fprintln(os.Stderr, "│ Workers  │ Wall (s) │ Avg/repo  │ Repos/h   │ Speedup │")
-	fmt.Fprintln(os.Stderr, "├──────────┼──────────┼───────────┼───────────┼─────────┤")
+	fmt.Fprintln(os.Stderr, "┌──────────┬───────────┬────────────┬───────────┬─────────┐")
+	fmt.Fprintln(os.Stderr, "│ Workers  │ Wall (ms) │ Avg/repo   │ Repos/h   │ Speedup │")
+	fmt.Fprintln(os.Stderr, "├──────────┼───────────┼────────────┼───────────┼─────────┤")
 	for _, r := range runs {
-		fmt.Fprintf(os.Stderr, "│ %8d │ %8.1f │ %7.1fs  │ %9.0f │ %6.2fx │\n",
-			r.Workers, r.WallClock.Seconds(), r.AvgPerRepo.Seconds(), r.ReposPerHour, r.Speedup)
+		fmt.Fprintf(os.Stderr, "│ %8d │ %9.1f │ %8.1fms  │ %9.0f │ %6.2fx │\n",
+			r.Workers, float64(r.WallClock.Milliseconds()), float64(r.AvgPerRepo.Milliseconds()), r.ReposPerHour, r.Speedup)
 	}
-	fmt.Fprintln(os.Stderr, "└──────────┴──────────┴───────────┴───────────┴─────────┘")
+	fmt.Fprintln(os.Stderr, "└──────────┴───────────┴────────────┴───────────┴─────────┘")
 }
 
 // runBenchmark executes Vexil against all repos with the given number of workers.
-func runBenchmark(workers int, repos []repo, vexilBin, cloneBase string) benchRun {
+func runBenchmark(workers, vexilConcurrency int, repos []repo, vexilBin, cloneBase string) benchRun {
 	results := make([]scanResult, len(repos))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, workers)
@@ -172,7 +174,7 @@ func runBenchmark(workers int, repos []repo, vexilBin, cloneBase string) benchRu
 			sem <- struct{}{}        // acquire
 			defer func() { <-sem }() // release
 
-			results[idx] = scanRepo(r, vexilBin, cloneBase)
+			results[idx] = scanRepo(r, vexilBin, cloneBase, vexilConcurrency)
 			done := completed.Add(1)
 			_ = done // suppress unused warning
 		}(i, r)
@@ -204,7 +206,7 @@ func runBenchmark(workers int, repos []repo, vexilBin, cloneBase string) benchRu
 }
 
 // scanRepo runs Vexil against a single pre-cloned repo and returns timing metrics.
-func scanRepo(r repo, vexilBin, cloneBase string) scanResult {
+func scanRepo(r repo, vexilBin, cloneBase string, vexilConcurrency int) scanResult {
 	repoDir := filepath.Join(cloneBase, "repos", r.Name)
 	result := scanResult{Repo: r.Name}
 
@@ -222,6 +224,7 @@ func scanRepo(r repo, vexilBin, cloneBase string) scanResult {
 	cmd := exec.CommandContext(ctx, vexilBin,
 		"--dir", repoDir,
 		"--git-aware",
+		"--concurrency", fmt.Sprintf("%d", vexilConcurrency),
 		"--format", "json",
 	)
 

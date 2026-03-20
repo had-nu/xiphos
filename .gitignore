@@ -3,6 +3,8 @@
 /xiphos-worker
 /xiphos-collector
 /xiphos-ingestor
+/benchmark
+/stress-test
 
 # Environment variables
 .env
