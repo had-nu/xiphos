@@ -1,8 +1,8 @@
 # Binaries
-bin/
-xiphos-worker
-xiphos-collector
-xiphos-ingestor
+/bin/
+/xiphos-worker
+/xiphos-collector
+/xiphos-ingestor
 
 # Environment variables
 .env
