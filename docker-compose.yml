@@ -1,0 +1,32 @@
+# Xiphos Local Development Environment
+# Usage: docker compose up -d
+#
+# This brings up NATS JetStream and PostgreSQL for local development.
+# The three Xiphos services (worker, collector, ingestor) are run natively
+# during development via `go run ./cmd/xiphos-worker` etc.
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    command: ["--jetstream", "--store_dir", "/data"]
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # HTTP monitoring
+    volumes:
+      - nats-data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: xiphos
+      POSTGRES_USER: xiphos
+      POSTGRES_PASSWORD: xiphos-dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./internal/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+volumes:
+  nats-data:
+  pg-data:
