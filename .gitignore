@@ -1,0 +1,23 @@
+# Binaries
+bin/
+xiphos-worker
+xiphos-collector
+xiphos-ingestor
+
+# Environment variables
+.env
+*.env
+
+# Dependency directories
+vendor/
+
+# Temporary files
+/tmp/
+*.log
+*.skill
+go-security/
+
+# OS files
+.DS_Store
+.idea/
+.vscode/
