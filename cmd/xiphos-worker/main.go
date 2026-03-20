@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"time"
 
 	"github.com/had-nu/xiphos/internal/queue"
@@ -17,7 +18,7 @@ func main() {
 	natsURL := flag.String("nats-url", envOrDefault("XIPHOS_NATS_URL", "nats://localhost:4222"), "NATS server URL")
 	vexilBin := flag.String("vexil-bin", envOrDefault("XIPHOS_VEXIL_BIN", "vexil"), "Path to Vexil binary")
 	cloneDir := flag.String("clone-dir", envOrDefault("XIPHOS_CLONE_DIR", "/tmp/xiphos-repos"), "Base directory for repo clones")
-	concurrency := flag.Int("concurrency", 16, "Vexil internal worker pool size")
+	concurrency := flag.Int("concurrency", envOrDefaultInt("XIPHOS_VEXIL_CONCURRENCY", 16), "Vexil internal worker pool size")
 	cloneTimeout := flag.Duration("clone-timeout", 120*time.Second, "Maximum time for git clone")
 	scanTimeout := flag.Duration("scan-timeout", 300*time.Second, "Maximum time for Vexil scan")
 	flag.Parse()
@@ -58,6 +59,16 @@ func main() {
 func envOrDefault(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+// envOrDefaultInt returns the integer environment variable value or a default.
+func envOrDefaultInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return fallback
 }

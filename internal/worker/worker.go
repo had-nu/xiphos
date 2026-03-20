@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -159,6 +160,9 @@ func runVexil(ctx context.Context, repoDir, vexilBin string, concurrency int, ti
 		"--dir", repoDir,
 		"--git-aware",
 		"--format", "json",
+	}
+	if concurrency > 0 {
+		args = append(args, "--concurrency", strconv.Itoa(concurrency))
 	}
 
 	// Separate arguments — no shell injection possible.

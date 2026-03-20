@@ -227,7 +227,7 @@ xiphos-collector \
 |--------|--------|--------------------|
 | Repos scanned per hour | 10,000+ | Full clone with history; repos ≤ 50MB |
 | Finding latency (push → DB) | < 5 min | Dependent on KEDA scale-up time (~30s) |
-| Worker cold-start | < 2s | Alpine container + Vexil binary (~20MB image) |
+| Worker cold-start | < 2s | Alpine container + Vexil binary + git (~50MB image); collector/ingestor ~20MB |
 | Cross-repo correlation | < 60s | SQL GROUP BY on indexed `value_hash` |
 | Concurrent workers | 100–1,000 | Limited by K8s cluster capacity and GitHub rate limits |
 

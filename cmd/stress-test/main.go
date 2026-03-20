@@ -85,7 +85,7 @@ func main() {
 	fmt.Fprintln(os.Stderr, "╔═══════════════════════════════════════════════════════════════╗")
 	fmt.Fprintln(os.Stderr, "║  Xiphos Stress Test — Wild Benchmark                         ║")
 	fmt.Fprintln(os.Stderr, "║  Source: Real public Go repos via GitHub Search API           ║")
-	fmt.Fprintln(os.Stderr, "║  Safety: 1 clone/s, small repos only (< 1MB), cached clones  ║")
+	fmt.Fprintln(os.Stderr, "║  Safety: 1 clone/s, small repos only (< 1MB), full clones    ║")
 	fmt.Fprintln(os.Stderr, "╚═══════════════════════════════════════════════════════════════╝")
 	fmt.Fprintln(os.Stderr, "")
 
@@ -110,7 +110,8 @@ func main() {
 		}
 		_ = os.RemoveAll(dest)
 
-		cmd := exec.Command("git", "clone", "--quiet", "--depth", "1", r.CloneURL, dest)
+		// Full clone — matches production behaviour (SPEC D-001: full clone only).
+		cmd := exec.Command("git", "clone", "--quiet", r.CloneURL, dest)
 		if err := cmd.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "  ✗ %s: %v\n", r.Name, err)
 			continue

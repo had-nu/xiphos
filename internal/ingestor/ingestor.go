@@ -19,6 +19,10 @@ import (
 	"github.com/had-nu/xiphos/internal/queue"
 )
 
+// seenMaxSize is the maximum number of entries in the dedup map before eviction.
+// Eviction is safe because the DB layer deduplicates via ON CONFLICT DO NOTHING.
+const seenMaxSize = 100_000
+
 // Config holds the ingestor's runtime configuration.
 type Config struct {
 	TokenFile    string
@@ -77,9 +81,10 @@ func Run(ctx context.Context, js nats.JetStreamContext, cfg Config) error {
 
 	// In-memory dedup set with simple string map. Repos seen in this session
 	// are skipped. This is intentionally not persistent — a restart re-scans.
+	// Bounded to seenMaxSize to prevent unbounded memory growth.
 	seen := make(map[string]struct{})
 
-	slog.Info("ingestor started", "poll_interval", cfg.PollInterval)
+	slog.Info("ingestor started", "poll_interval", cfg.PollInterval, "seen_max", seenMaxSize)
 
 	ticker := time.NewTicker(cfg.PollInterval)
 	defer ticker.Stop()
@@ -151,6 +156,13 @@ func pollEvents(ctx context.Context, js nats.JetStreamContext, pool *tokenPool, 
 		repoName := ev.Repo.Name
 		if _, exists := seen[repoName]; exists {
 			continue
+		}
+
+		// Evict when the dedup set exceeds the bound. Some repos may be
+		// re-scanned, but ON CONFLICT DO NOTHING in the DB handles that.
+		if len(seen) >= seenMaxSize {
+			slog.Warn("seen map eviction", "size", len(seen), "max", seenMaxSize)
+			clear(seen)
 		}
 		seen[repoName] = struct{}{}
 
