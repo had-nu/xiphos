@@ -188,7 +188,9 @@ func runBenchmark(workers int, repos []repo, vexilBin, cloneBase string) benchRu
 		totalScan += r.TotalDur
 		totalFindings += r.Findings
 	}
-	avgPerRepo := totalScan / time.Duration(len(repos))
+	// AvgPerRepo: wall clock divided by repo count — the throughput an operator sees.
+	// (Summing per-worker durations would inflate this by the concurrency factor.)
+	avgPerRepo := wallClock / time.Duration(len(repos))
 	reposPerHour := float64(len(repos)) / wallClock.Hours()
 
 	return benchRun{
@@ -219,6 +221,7 @@ func scanRepo(r repo, vexilBin, cloneBase string) scanResult {
 
 	cmd := exec.CommandContext(ctx, vexilBin,
 		"--dir", repoDir,
+		"--git-aware",
 		"--format", "json",
 	)
 

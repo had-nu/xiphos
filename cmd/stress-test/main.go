@@ -297,7 +297,7 @@ func scanRepo(r repo, vexilBin, cloneBase string) scanResult {
 	defer cancel()
 
 	scanStart := time.Now()
-	cmd := exec.CommandContext(ctx, vexilBin, "--dir", repoDir, "--format", "json")
+	cmd := exec.CommandContext(ctx, vexilBin, "--dir", repoDir, "--git-aware", "--format", "json")
 	output, err := cmd.Output()
 	result.ScanSec = time.Since(scanStart).Seconds()
 	result.OutputBytes = len(output)
